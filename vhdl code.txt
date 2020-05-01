@@ -1,0 +1,84 @@
+ -- IMPORTING THE NEEDED LIBRARIES
+library IEEE;
+use IEEE.std_logic_1164.all;
+
+-- CREATING THE PLD ENTITY WITH IT'S INPUTS AND OUTPUTS
+ENTITY PLD IS 
+	PORT ( A0,A1,A2,A12,BHE,MIO,CLK : IN STD_LOGIC ;
+    		RAM_LOW,RAM_HIGH,ROM_LOW,ROM_HIGH,CSPPI1,CSPPI2,CSPIT,CSPIC :OUT STD_LOGIC ) ;
+            
+END PLD;
+
+-- CREATING THE CHIP SELECTION ARCH. FOR THE PLD
+ARCHITECTURE CS OF PLD IS 
+SIGNAL PA : STD_LOGIC_VECTOR ( 28 DOWNTO 1 ) ; -- THIS SIGNAL REPRESENTS THE INTERNAL PINS OF THE PLD 
+BEGIN 
+
+      PROCESS(CLK) -- WE NEED TO DO THE ASSIGNMENTS ON EVERY CLOCK 
+	BEGIN
+    IF (rising_edge(clk) ) THEN    
+	PA(3)<=A0;
+    PA(2)<=A1;
+    PA(1)<=A2;
+	PA(17)<=A12;
+	PA(18)<= BHE ;
+	PA(19) <= MIO;  --ASSIGNIGN INPUTS TO THE PLD PINS AS SHOWN IN THE SCHEMATIC
+	-- ASSIGNING THE OUTPUT PINS ACCORDING TO THE ASSUMED ADRESSES AND FORMULAS
+	PA(16) <= NOT (NOT A0 AND  MIO AND NOT A12); -- RAM_LOW 
+    PA(15) <= NOT (NOT BHE AND  MIO AND NOT A12); -- RAM_HIGH
+    PA(14) <= NOT (NOT A0 AND  MIO AND  A12); -- ROM_LOW
+    PA(13) <=  NOT (NOT BHE AND  MIO AND  A12);  --ROM_HIGH
+    -- ASSIGNING CSs OF PPIS , PIT AND PIC 
+    
+    PA(5) <= NOT A1 AND NOT A2; --PPI1  00
+    PA(6) <= A1 AND NOT A2 ;--PPI2 01 
+    PA(7) <= NOT A1 AND A2; --PIT 10
+    PA(8) <= A1 AND A2 ; --PIC 11
+    END IF;
+	END PROCESS; 
+    
+    -- ASSIGNING OUTPUTS FROM THE PLD PINS
+    RAM_LOW <= PA(16) ;
+    RAM_HIGH<= PA(15) ; 
+    ROM_LOW <= PA(14) ;
+    ROM_HIGH <= PA(13) ; 
+    
+    
+    CSPPI1 <= PA(5); 
+    CSPPI2 <= PA(6) ; 
+    CSPIT <= PA(7);
+    CSPIC <= PA(8) ; 
+    
+    
+END CS ;
+
+
+-- next an architecture for wait state insertion will be implemented 
+ARCHITECTURE WAITSTATES FOR PLD IS 
+  TYPE state_type IS ( T1, T2, WS1, WS2, WS3 ,READY ); 
+  SIGNAL state: state_type;
+  TYPE CHIPSELECT IS (SRAM,EPROM,PPI,PIT,PIC) 
+  SIGNAL CS : CHIPSELECT
+  process(clk , CS)
+  begin
+  IF (rising_edge(clk) ) THEN    
+  CASE state IS
+  when TI => state <= T2;-- ALWAYS GO TO TO T2
+  WHEN T2 => state <= WS1; --ALWATS GO TO WS1 , NO 0 WAIT STATES CASE
+  WHEN WS1 => if CS= PIC THEN state<= READY ; -- since only pic needs 1 wait state 
+  				ELSE state <= WS2 ;
+                end if ;
+         
+  WHEN WS2 => IF CS=EPROM OR CS= PPI THEN state <= READY ; 
+  end if ;
+  WHEN WS3 => IF CS= PIC THEN state <= READY ;
+  end if ;
+  end if 
+  end process;
+  
+  RDY<='1' WHEN state = READY
+  else RDY <='0'
+
+END ARCHITECTURE; 
+
+-- NOTE : attached to my project submission is a scaaned sheet of the way i calculated wait states for the chips .
